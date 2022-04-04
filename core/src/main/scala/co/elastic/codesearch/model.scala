@@ -2,6 +2,7 @@ package co.elastic.codesearch
 
 object model {
   final case class Version(value: String) extends AnyVal
+  final case class FileName(value: String) extends AnyVal
 
   trait Language {
     val name: String
@@ -9,7 +10,9 @@ object model {
   }
 
   final case class SourceFile(
+    version: Version,
     language: Language,
+    fileName: FileName,
     source: String,
     spans: Set[SourceSpan]
   )

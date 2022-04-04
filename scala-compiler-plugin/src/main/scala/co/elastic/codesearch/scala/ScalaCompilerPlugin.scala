@@ -1,11 +1,15 @@
 package co.elastic.codesearch.scala
 
 import co.elastic.codesearch.index.SourceIndexer
+import co.elastic.codesearch.index.elasticsearch.ElasticsearchSourceIndexer
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import co.elastic.codesearch.lang.scala.model._
 import co.elastic.codesearch.lang.scala.model.ScalaLanguageElement._
-import co.elastic.codesearch.model.{SourceFile, SourceSpan}
+import co.elastic.codesearch.model.{FileName, LanguageElement, SourceFile, SourceSpan, Version}
+import com.sksamuel.elastic4s.fields.KeywordField
+import com.sksamuel.elastic4s.{ElasticClient, ElasticProperties}
+import com.sksamuel.elastic4s.http.JavaClient
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.{Await, Future}
@@ -26,13 +30,19 @@ class ScalaCompilerPlugin(val global: Global) extends Plugin {
     options: List[String],
     error: String => Unit
   ): Unit = {
+    println(s"options = ${options}")
     options.map(_.split(":").toList).foreach {
-      case "output" :: path :: Nil =>
+      case "output" :: "file" :: path :: Nil =>
         val f = new File(path)
         f.delete()
         f.getParentFile.mkdirs()
         f.createNewFile()
-        Component.outputFile = f
+        Component.outputFile = Some(f)
+      case "output" :: "es" :: "url" :: url =>
+        println(s"hit es url = ${url.mkString(":")}")
+        Component.esUrl = Some(url.mkString(":"))
+      case "version" :: version :: Nil =>
+        Component.version = Some(version)
       case _ =>
     }
   }
@@ -46,26 +56,51 @@ class ScalaCompilerPlugin(val global: Global) extends Plugin {
     override val global: ScalaCompilerPlugin.this.global.type = ScalaCompilerPlugin.this.global
     override val phaseName: String = ScalaCompilerPlugin.this.name
     override val runsRightAfter: Option[String] = Some("typer")
-    var outputFile: File = null
+    var outputFile: Option[File] = None
+    var version: Option[String] = None
     val sourceFiles = ListBuffer.empty[SourceFile]
+    var esUrl: Option[String] = None
 
-    override def newPhase(prev: Phase): Phase = new SpecialPhase(prev, outputFile)
+    override def newPhase(prev: Phase): Phase = new SpecialPhase(prev)
 
-    class SpecialPhase(prev: Phase, outputFile: File) extends StdPhase(prev) {
+    class SpecialPhase(prev: Phase) extends StdPhase(prev) {
       override def name = ScalaCompilerPlugin.this.name
 
       override def run() = {
-        val fos = new FileOutputStream(outputFile)
-        val sourceIndexer = new SourceIndexer.FileSourceIndexer(fos)
+        val sourceIndexer = (esUrl, outputFile) match {
+          case (Some(esUrl), _) =>
+            def languageElementFields(el: LanguageElement): Map[String, Any] = {
+              el match {
+                case ScalaLanguageElement.Class(name) => Map("name" -> name.value)
+                case ScalaLanguageElement.Def(name, _, _) => Map("name" -> name.value)
+                case _ => Map.empty[String, Any]
+              }
+            }
+
+            new ElasticsearchSourceIndexer(
+              client = ElasticClient(JavaClient(ElasticProperties(esUrl))),
+              codeSearchVersion = "1.0.0",
+              language = Scala2_12,
+              languageElementTemplate = Seq(
+                KeywordField("name")
+              ),
+              languageElementFields = languageElementFields
+            )
+          case (_, Some(outputFile)) =>
+            val fos = new FileOutputStream(outputFile)
+            new SourceIndexer.FileSourceIndexer(fos)
+          case _ =>
+            throw new Exception("SourceIndexer not configured")
+        }
+        println(s"source indexer = ${sourceIndexer}")
         val resultF = for {
           _ <- Future(super.run())
+          _ <- sourceIndexer.setup()
           _ <- Future.traverse(sourceFiles.toList) { sourceFile =>
             sourceIndexer.indexFile(sourceFile)
           }
         } yield {}
-        val result = scala.util.Try(Await.result(resultF, 30.minutes))
-        fos.close()
-        result.get
+        Await.result(resultF, 30.minutes)
       }
 
       override def apply(unit: CompilationUnit): Unit = {
@@ -234,59 +269,21 @@ class ScalaCompilerPlugin(val global: Global) extends Plugin {
             Set.empty
           }
           val allSpans = spans ++ tree.children.flatMap(t => processTree(t, s"${prefix}\t", parent = Some(tree))).toSet
-          println(s"Spans = ${allSpans}")
-          //println(s"${prefix}Symbol [${tree.symbol.fullName}] ${tree.symbol.pos.show}")
-//          parent match {
-//            case Some(p) if !p.pos.isDefined || p.pos.start == tree.pos.start =>
-//            case _ =>
-//              println(s"${prefix}${tree.getClass.getSimpleName}${if(tree.hasSymbolField){s" - ${tree.symbol.fullName}"}else{""}} - ${tree.pos.show}")
-//
-//          }
-          //Set.empty
+
           allSpans
         }
 
-        println(s"Unit [${unit.source.file.name}]")
         val spans = processTree(unit.body, "\t")
-//        println()
-//        println()
-//        println("Symbols:")
-//        symbols.foreach(s => println(s"\t${s.toString}  -  ${s.pos.show}"))
-        //val file = SourceFile(language = Scala2_12, source = new String(unit.source.content), spans = spans)
 
-//        println("\n\n\n\n")
-//        symbols.toList.sortBy(_._2.start).foreach {
-//          case (file, range, symbol) =>
-//            println(s"$file [${range.start}, ${range.end}] -> $symbol")
-//        }
-//        println("\n\n\n")
-
-        // remove overlapping symbols
-//        val dedupedSymbols = symbols.foldLeft(Set.empty[(String, Range, Symbol)]) {
-//          case (acc, a @ (file, range, symbol)) =>
-//            acc.find(tup => !tup._2.intersect(range).isEmpty) match {
-//              case Some(b @ (_, otherRange, _)) if otherRange.length >= range.length =>
-//                acc.diff(Set(b)).union(Set(a))
-//              case Some(_) =>
-//                acc
-//              case None =>
-//                acc.union(Set(a))
-//            }
-//        }
-
-        // order symbols
-//        val orderedSymbols = dedupedSymbols.toList.sortBy(_._2.start)
-//
-//        println("\n\n\n\n")
-//        orderedSymbols.foreach {
-//          case (file, range, symbol) =>
-//            println(s"$file [${range.start}, ${range.end}] -> $symbol")
-//        }
-//        println("\n\n\n")
-
-        //file.spans.toList.sortBy(_.start).foreach(println)
-
-        Component.sourceFiles.append(SourceFile(Scala2_12, new String(unit.source.content), spans))
+        Component.sourceFiles.append(
+          SourceFile(
+            Version(version.getOrElse("1.0.0")),
+            Scala2_12,
+            FileName(unit.source.file.name),
+            new String(unit.source.content),
+            spans
+          )
+        )
       }
     }
 
