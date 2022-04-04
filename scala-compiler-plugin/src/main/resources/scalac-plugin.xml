@@ -1,0 +1,4 @@
+<plugin>
+    <name>code-search</name>
+    <classname>co.elastic.codesearch.scala.ScalaCompilerPlugin</classname>
+</plugin>
