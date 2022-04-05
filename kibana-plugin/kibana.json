@@ -1,0 +1,14 @@
+{
+  "id": "scode",
+  "version": "1.0.0",
+  "kibanaVersion": "kibana",
+  "owner": {
+    "name": "Samuel Nelson",
+    "githubTeam": ""
+  },
+  "description": "Search, observe, and protect your code",
+  "server": true,
+  "ui": true,
+  "requiredPlugins": ["navigation", "fieldFormats"],
+  "optionalPlugins": []
+}
