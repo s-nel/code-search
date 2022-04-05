@@ -8,6 +8,7 @@ lazy val example = (project in file("example"))
     scalaVersion := "2.12.10",
     libraryDependencies ++= Seq(
       "ch.qos.logback" % "logback-classic" % "1.0.1",
+      "co.elastic.logging" % "logback-ecs-encoder" % "1.3.2",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4"
     ),
     scalacOptions ++= Seq(

@@ -1,14 +1,15 @@
 <configuration>
 
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-        <file>example.log</file>
+        <file>example/logs/example.json</file>
         <append>true</append>
         <!-- set immediateFlush to false for much higher logging throughput -->
         <immediateFlush>true</immediateFlush>
         <!-- encoders are assigned the type
              ch.qos.logback.classic.encoder.PatternLayoutEncoder by default -->
-        <encoder>
-            <pattern>%-4relative [%thread] %-5level %logger{35} - %msg%n</pattern>
+        <encoder class="co.elastic.logging.logback.EcsEncoder">
+            <serviceName>example</serviceName>
+            <serviceNodeName>example-node</serviceNodeName>
         </encoder>
     </appender>
 

@@ -64,6 +64,7 @@ class ElasticsearchSourceIndexer(
             "name" -> language.name,
             "version" -> language.version.map(_.value)
           ),
+          "file_name" -> file.fileName.value,
           "source" -> Map(
             "content" -> file.source
           ),
@@ -103,6 +104,7 @@ class ElasticsearchSourceIndexer(
                 KeywordField("version")
               )
             ),
+            KeywordField("file_name"),
             ObjectField(
               name = "source",
               enabled = Some(false),

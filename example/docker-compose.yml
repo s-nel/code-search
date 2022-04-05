@@ -1,0 +1,24 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.2
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:7.17.2
+    volumes:
+      - "./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro"
+      - "./logs:/logs"
+    entrypoint:
+      - filebeat
+      - -e
+      - --strict.perms=false
+      - -E
+      - output.elasticsearch.hosts=["elasticsearch:9200"]
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.2
+    ports:
+      - 5602:5601
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
