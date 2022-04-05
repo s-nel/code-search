@@ -14,20 +14,42 @@ export class CodePlugin implements Plugin<CodePluginSetup, CodePluginStart, Code
   public setup(core: CoreSetup, setupDeps: CodePluginSetupDeps): CodePluginSetup {
     class StackTraceFormat extends FieldFormat {
       static id = 'stack-trace';
-      static title = 'Stack Trace';
-    
-      // 2. Specify field types that this formatter supports
+      static title = 'Java Stack Trace';
+
       static fieldType = KBN_FIELD_TYPES.STRING;
-    
-      // 4. Implement a conversion function
+
       htmlConvert = (val: unknown, options?: HtmlContextTypeOptions) => {
         if (typeof val !== 'string') {
           return `${val}`;
         }
 
-        const codeUrl = core.http.basePath.prepend(`/app/code?class=bar.Bar&file=bar.scala`);
+        const codeUrl = (cls, file, lineNum) => {
+            return core.http.basePath.prepend(`/app/code?class=${cls}&file=${file}&lines=${lineNum}`);
+        }
+
+        const lines = val.split(/\n/)
+        const formattedLines = []
+        lines.forEach(line => {
+            if (line.trim().startsWith("at")) {
+                const matches = line.match(/(\s*at )([^\(]+)\(([^:]+):(\d+)\)/);
+                if (matches && matches.length == 5) {
+                    console.log(matches);
+                    const clsMethod = matches[2];
+                    const cls = clsMethod.substring(0, clsMethod.lastIndexOf("."))
+                    const file = matches[3];
+                    const lineNum = matches[4];
+                    const url = codeUrl(cls, file, lineNum)
+                    formattedLines.push(`${matches[1]}${clsMethod}(<a href="${url}">${file}:${lineNum}</a>)`);
+                } else {
+                    formattedLines.push(line)
+                }
+            } else {
+                formattedLines.push(line)
+            }
+        })
     
-        return `<a href="${codeUrl}">${val}</a>`;
+        //return `<a href="${codeUrl}">${val}</a>`;
+        return formattedLines.join("\n");
       };
     }
 

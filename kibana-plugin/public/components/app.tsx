@@ -9,6 +9,7 @@ import {
   EuiButton,
   EuiCodeBlock,
   EuiHorizontalRule,
+  EuiLoadingContent,
   EuiPage,
   EuiPageBody,
   EuiPageContent,
@@ -104,12 +105,19 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
                     </h2>
                   </EuiTitle>
                 </EuiPageContentHeader>
-                <EuiPageContentBody>
-                  <EuiText>
-                    <EuiCodeBlock language={file?.language?.name.toLowerCase()} lineNumbers={lineNumbers}>
-                      {file?.source?.content}
-                    </EuiCodeBlock>
-                  </EuiText>
+                  <EuiPageContentBody>
+                    { notFound ? (
+                        <p>File not found</p>
+                    ): (!file ? (
+                        <EuiLoadingContent/>
+                    ) : (
+
+                          <EuiText>
+                            <EuiCodeBlock language={file?.language?.name.toLowerCase()} lineNumbers={lineNumbers}>
+                              {file?.source?.content}
+                            </EuiCodeBlock>
+                          </EuiText>
+                    ))}
                 </EuiPageContentBody>
               </EuiPageContent>
             </EuiPageBody>

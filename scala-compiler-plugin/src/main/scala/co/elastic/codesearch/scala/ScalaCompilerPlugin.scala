@@ -234,6 +234,15 @@ class ScalaCompilerPlugin(val global: Global) extends Plugin {
                           ScalaLanguageElement.Class(ScalaLanguageElement.Name(tree.symbol.fullName))
                         )
                       )
+                    case ModuleDef(mods, name, impl) =>
+                      println(s"${prefix}object ${tree.symbol.fullName}$$ ${tree.pos.show}")
+                      Set(
+                        SourceSpan(
+                          tree.pos.start,
+                          tree.pos.end,
+                          ScalaLanguageElement.Class(ScalaLanguageElement.Name(s"${tree.symbol.fullName}$$"))
+                        )
+                      )
                     case ValDef(mods, name, tpt, rhs) =>
                       println(
                         s"${prefix}val ${tree.symbol.fullName}: ${tree.symbol.tpe.typeSymbol.fullName} ${tree.pos.show}"
