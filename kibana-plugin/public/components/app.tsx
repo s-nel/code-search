@@ -50,6 +50,7 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
   const params = parse(history.location.search)
 
   // Use React hooks to manage state.
+  const [loadedFromParams, setLoadedFromParams] = useState<boolean>(false);
   const [files, setFiles] = useState<object[] | undefined>(undefined);
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isSearching, setSearching] = useState<boolean>(false)
@@ -60,9 +61,9 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
   const [outline, setOutline] = useState(null)    
   const [outlineLoading, setOutlineLoading] = useState(false);
 
-  const findClass = (cls: string, file: string) => {
-    //setFiles(undefined)
-    // setIsLoading(true)
+  function findClass(cls: string, file: string) {
+    setIsLoading(true)
+    setFiles(undefined)
     // Use the core http service to make a response to the server API.
     http.get('/api/code/class', {
       query: {
@@ -70,8 +71,8 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
         file: file,
       },
     }).then((res) => {
-      setIsLoading(false)
       setFiles([res]);
+      setIsLoading(false)
     });
   }
 
@@ -81,10 +82,10 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
     setQuery(q)
   }
 
-  const search = () => {
+  function search() {
+    setIsLoading(true)
     setFiles(undefined)
     setSearching(true)
-    setIsLoading(true)
     setLines(true)
     http.get('/api/code/search', {
       query: {
@@ -92,14 +93,11 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
       }
     }).then((res) => {
       setSearching(false)
-      setIsLoading(false)
       console.log(res);
           
-      var fs = []
-      res.hits.hits.forEach(hit => {
-          fs.push(hit['_source'])
-      })
+      const fs = res.hits.hits.map(hit => hit['_source'])
       setFiles(fs)
+      setIsLoading(false)
     })
   }
 
@@ -167,7 +165,8 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
     })
   }
 
-  if (!files && !isLoading && (!!params.class || !!params.file)) {
+  if (!loadedFromParams && (!!params.class || !!params.file)) {
+    setLoadedFromParams(true)
     findClass(params.class, params.file)
   }
 
@@ -186,7 +185,7 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
               showSearchBar={false}
               useDefaultBehaviors={true}
             />
-              <EuiFieldSearch value={query} fullWidth onChange={onSearchChange} onSearch={search} isLoading={isSearching} suggestions={[]} placeholder="Search code" status={status} />
+            <EuiFieldSearch value={query} fullWidth onChange={onSearchChange} onSearch={search} isLoading={isSearching} suggestions={[]} placeholder="Search code" status={status} />
             <EuiSpacer />
             <EuiFlexGroup>
               <EuiFlexItem>
@@ -200,33 +199,32 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
                 </EuiPanel>
               </EuiFlexItem>
               <EuiFlexItem grow={8}>
-                  { isLoading && <EuiSpinner /> }
-                  { !files && <EuiEmptyPrompt color="subdued" title={<h3>Class not found</h3>} layout="vertical"/> }
-            {
-                !isLoading && files && files.map(file => (<div>
-                  <EuiPageContentHeader>
-                    <EuiTitle>
-                      <h2>
-                        <pre>
-                          {file?.file_name || params.file}
-                        </pre>
-                      </h2>
-                    </EuiTitle>
-                  </EuiPageContentHeader>
-                  <EuiSpacer />
-                    <EuiPageContentBody>
+                { isLoading && <EuiLoadingContent lines={3} /> }
+                { !files && !isLoading && <EuiEmptyPrompt color="subdued" title={<h3>Class not found</h3>} layout="vertical"/> }
+                {
+                  !isLoading && files && files.map(file => (
+                    <div>
+                      <EuiPageContentHeader>
+                        <EuiTitle size="s">
+                            <pre>
+                              {file?.file_name}
+                            </pre>
+                        </EuiTitle>
+                      </EuiPageContentHeader>
+                      <EuiSpacer />
+                        <EuiPageContentBody>
 
-                        <EuiText>
-                          <EuiCodeBlock language={file?.language?.name.toLowerCase()} lineNumbers={lines}>
-                            {file?.source?.content}
-                          </EuiCodeBlock>
-                        </EuiText>
-                  </EuiPageContentBody>
-                  <EuiSpacer />
-                  </div>
-                ))
-            }
-            </EuiFlexItem>
+                            <EuiText>
+                              <EuiCodeBlock language={file?.language?.name.toLowerCase()} lineNumbers={lines}>
+                                {file?.source?.content}
+                              </EuiCodeBlock>
+                            </EuiText>
+                      </EuiPageContentBody>
+                      <EuiSpacer />
+                    </div>
+                  ))
+                }
+              </EuiFlexItem>
             </EuiFlexGroup>
           </>
         </I18nProvider>
