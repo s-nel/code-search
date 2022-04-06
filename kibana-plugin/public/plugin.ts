@@ -1,13 +1,27 @@
 import { i18n } from '@kbn/i18n';
+import { from } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { AppMountParameters, CoreSetup, CoreStart, Plugin } from '../../../src/core/public';
 import { CodePluginSetup, CodePluginStart, AppPluginStartDependencies } from './types';
 import { PLUGIN_NAME } from '../common';
 import { FieldFormatsSetup } from 'src/plugins/field_formats/public';
 import { KBN_FIELD_TYPES } from '@kbn/field-types';
 import { FieldFormat } from '../../../src/plugins/field_formats/common';
+import {
+  FetchDataParams,
+  HasDataParams,
+  METRIC_TYPE,
+  ObservabilityPublicSetup,
+  ObservabilityPublicStart,
+} from '../../../x-pack/plugins/observability/public';
 
 export interface CodePluginSetupDeps {
   fieldFormats: FieldFormatsSetup;
+}
+
+export interface CodePluginStartDeps {
+  observability: ObservabilityPublicStart;
+  navigation: NavigationPublicStart;
 }
 
 export class CodePlugin implements Plugin<CodePluginSetup, CodePluginStart, CodePluginSetupDeps> {
@@ -53,7 +67,47 @@ export class CodePlugin implements Plugin<CodePluginSetup, CodePluginStart, Code
       };
     }
 
+    class LoggerFormat extends FieldFormat {
+      static id = 'logger';
+      static title = 'Logger Classname';
+
+      static fieldType = KBN_FIELD_TYPES.STRING;
+
+      htmlConvert = (val: unknown, options?: HtmlContextTypeOptions) => {
+        if (typeof val !== 'string') {
+          return `${val}`;
+        }
+
+        const codeUrl = (cls) => {
+            return core.http.basePath.prepend(`/app/code?class=${cls}`);
+        }
+    
+        return `<a href="${codeUrl(val)}">${val}</a>`;
+      };
+    }
+
     setupDeps.fieldFormats.register([StackTraceFormat])
+    setupDeps.fieldFormats.register([LoggerFormat])
+
+    // register observability nav if user has access to plugin
+    setupDeps.observability.navigation.registerSections(
+      from(core.getStartServices()).pipe(
+        map(([coreStart, pluginsStart]) => {
+          return [
+            // Code navigation
+            {
+              label: 'Code',
+              sortKey: 220,
+              entries: [
+                { label: 'Browser', app: 'code', path: '' },
+              ],
+            },
+          ];
+
+          return [];
+        })
+      )
+    );
 
     // Register an application into the side navigation menu
     core.application.register({
@@ -70,11 +124,12 @@ export class CodePlugin implements Plugin<CodePluginSetup, CodePluginStart, Code
       },
       async mount(params: AppMountParameters) {
         // Load application bundle
-        const { renderApp } = await import('./application');
-        // Get start services as specified in kibana.json
-        const [coreStart, depsStart] = await core.getStartServices();
+        const [{ renderApp }, [coreStart, depsStart]] = await Promise.all([
+            import('./application'),
+            core.getStartServices()
+        ]);
         // Render the application
-        return renderApp(coreStart, depsStart as AppPluginStartDependencies, params);
+        return renderApp(coreStart, depsStart as CodePluginStartDeps, setupDeps, params);
       },
     });
 

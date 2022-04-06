@@ -71,8 +71,9 @@ class ScalaCompilerPlugin(val global: Global) extends Plugin {
           case (Some(esUrl), _) =>
             def languageElementFields(el: LanguageElement): Map[String, Any] = {
               el match {
-                case ScalaLanguageElement.Class(name) => Map("name" -> name.value)
-                case ScalaLanguageElement.Def(name, _, _) => Map("name" -> name.value)
+                case ScalaLanguageElement.Class(names) => Map("name" -> names.toList.map(_.value))
+                case ScalaLanguageElement.Object(names) => Map("name" -> names.toList.map(_.value))
+                case ScalaLanguageElement.Def(names, _, _) => Map("name" -> names.toList.map(_.value))
                 case _ => Map.empty[String, Any]
               }
             }
@@ -231,7 +232,12 @@ class ScalaCompilerPlugin(val global: Global) extends Plugin {
                         SourceSpan(
                           tree.pos.start,
                           tree.pos.end,
-                          ScalaLanguageElement.Class(ScalaLanguageElement.Name(tree.symbol.fullName))
+                          ScalaLanguageElement.Class(
+                            Set(
+                              ScalaLanguageElement.Name(tree.symbol.fullName),
+                              ScalaLanguageElement.Name(tree.symbol.nameString)
+                            )
+                          )
                         )
                       )
                     case ModuleDef(mods, name, impl) =>
@@ -240,7 +246,13 @@ class ScalaCompilerPlugin(val global: Global) extends Plugin {
                         SourceSpan(
                           tree.pos.start,
                           tree.pos.end,
-                          ScalaLanguageElement.Class(ScalaLanguageElement.Name(s"${tree.symbol.fullName}$$"))
+                          ScalaLanguageElement.Object(
+                            Set(
+                              ScalaLanguageElement.Name(tree.symbol.fullName),
+                              ScalaLanguageElement.Name(tree.symbol.nameString),
+                              ScalaLanguageElement.Name(s"${tree.symbol.fullName}$$")
+                            )
+                          )
                         )
                       )
                     case ValDef(mods, name, tpt, rhs) =>
@@ -257,7 +269,10 @@ class ScalaCompilerPlugin(val global: Global) extends Plugin {
                           tree.pos.start,
                           tree.pos.end,
                           ScalaLanguageElement.Def(
-                            ScalaLanguageElement.Name(tree.symbol.fullName),
+                            Set(
+                              ScalaLanguageElement.Name(tree.symbol.fullName),
+                              ScalaLanguageElement.Name(tree.symbol.nameString)
+                            ),
                             List.empty,
                             ScalaLanguageElement.Type(tpt.symbol.fullName)
                           )
@@ -289,6 +304,7 @@ class ScalaCompilerPlugin(val global: Global) extends Plugin {
             Version(version.getOrElse("1.0.0")),
             Scala2_12,
             FileName(unit.source.file.name),
+            unit.source.file.path,
             new String(unit.source.content),
             spans
           )

@@ -6,6 +6,7 @@ import { Router } from 'react-router-dom';
 import { parse, ParsedQuery } from 'query-string';
 
 import {
+  htmlIdGenerator,
   EuiButton,
   EuiCodeBlock,
   EuiHorizontalRule,
@@ -16,8 +17,17 @@ import {
   EuiPageContentBody,
   EuiPageContentHeader,
   EuiPageHeader,
+  EuiFieldSearch,
+  EuiTreeView,
+  EuiSpacer,
   EuiTitle,
   EuiText,
+  EuiFlexGroup,
+  EuiFlexItem,
+  EuiToken,
+  EuiTreeViewNode,
+  EuiSpinner,
+  EuiPanel
 } from '@elastic/eui';
 
 import { CoreStart, ScopedHistory } from '../../../../src/core/public';
@@ -36,11 +46,22 @@ interface CodeAppDeps {
 }
 
 export const CodeApp = ({ basename, notifications, http, navigation, history }: CodeAppDeps) => {
+  const params = parse(history.location.search)
+
   // Use React hooks to manage state.
-  const [file, setFile] = useState<object | undefined>();
+  const [files, setFiles] = useState<object[] | undefined>();
   const [notFound, setNotFound] = useState<boolean>(false);
+  const [isLoading, setLoading] = useState<boolean>(false)
+  const [isSearching, setSearching] = useState<boolean>(false)
+  const [query, setQuery] = useState('')
+  const [lines, setLines] = useState(params.lines ? {
+                                         highlight: params.lines
+                                       } : true)
+  const [outline, setOutline] = useState(null)    
+  const [outlineLoading, setOutlineLoading] = useState(false)
 
   const findClass = (cls, file) => {
+    //setLoading(true)
     // Use the core http service to make a response to the server API.
     http.get('/api/code/class', {
       query: {
@@ -48,82 +69,170 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
         file: file,
       },
     }).then((res) => {
-      console.log(res);
-      setFile(res);
-      // Use the core notifications service to display a success message.
-      notifications.toasts.addSuccess(
-        i18n.translate('code.dataUpdated', {
-          defaultMessage: 'Data updated',
-        })
-      );
+      //setLoading(false)
+      setFiles([res]);
     }).catch(() => {
       setNotFound(true)
     });
   };
 
-  const params = parse(history.location.search)
+  const onSearchChange = (e) => {
+    const q = e.target.value
+    console.log(q)
+    setQuery(q)
+  }
 
-  if (!file && !notFound) {
+  const search = () => {
+    setSearching(true)
+    setLines(true)
+    http.get('/api/code/search', {
+      query: {
+          q: query
+      }
+    }).then((res) => {
+      setSearching(false)
+      console.log(res);
+      if (res?.hits?.hits?.length > 0) {
+          setNotFound(false)
+          var fs = []
+          res.hits.hits.forEach(hit => {
+              fs.push(hit['_source'])
+          })
+          setFiles(fs)
+      }
+      else {
+          setNotFound(true)
+      }
+    })
+  }
+
+  const loadOutline = () => {
+    setOutlineLoading(true)
+    http.get('/api/code/search', {
+      query: {
+          q: ''
+      }
+    }).then((res) => {
+        console.log(res);
+        if (res?.hits?.hits?.length > 0) {
+          const classes = res.hits.hits.flatMap(hit => {
+            const src = hit['_source']
+            return src.spans.filter(span => span.element.kind == 'class')
+          })
+
+          console.log(classes)
+
+          var outline: EuiTreeViewNode[] = []
+
+          const findOrCreatePackage = (pkg: string[], span, o: EuiTreeViewNode[]): EuiTreeViewNode => {
+            const foundPkg = o.find(p => p.id == pkg[0])
+            if (foundPkg) {
+              if (pkg.length <= 1) {
+                return foundPkg
+              } else {
+                if (!foundPkg.children) {
+                  foundPkg.children = []
+                }
+                return findOrCreatePackage(pkg.slice(1), span, foundPkg.children)
+              }
+            } else {
+              const isCls = pkg[0].toUpperCase().charAt(0) == pkg[0].charAt(0)
+              const newPkg: EuiTreeViewNode = {
+                label: pkg[0],
+                id: pkg[0],
+                icon: isCls ? <EuiToken iconType="tokenClass" /> : <EuiToken iconType="tokenPackage" />,
+                callback: () => {
+                  if (isCls) {
+                    setLines(true)
+                    findClass(span.element.name[0], undefined)
+                  }
+                }
+              }
+              o.push(newPkg)
+              if (pkg.length <= 1) {
+                return newPkg
+              } else {
+                newPkg.children = []
+                return findOrCreatePackage(pkg.slice(1), span, newPkg.children)
+              }
+            }
+          }
+
+          classes.forEach(cls => {
+            const packageArr = cls.element.name[0].split('.')
+            findOrCreatePackage(packageArr, cls, outline)
+          })
+
+          console.log(outline)
+
+          setOutline(outline)
+        }
+        setOutlineLoading(false)
+    })
+  }
+
+  if (!files && !isLoading && !notFound && (!!params.class || !!params.file)) {
     findClass(params.class, params.file)
   }
 
-  const lineNumbers = params.lines ? {
-    highlight: params.lines
-  } : true
+  if (outline == null && !outlineLoading) {
+    loadOutline()
+  }
 
   // Render the application DOM.
   // Note that `navigation.ui.TopNavMenu` is a stateful component exported on the `navigation` plugin's start contract.
   return (
-    <Router history={history}>
-      <I18nProvider>
-        <>
-          <navigation.ui.TopNavMenu
-            appName={PLUGIN_ID}
-            showSearchBar={false}
-            useDefaultBehaviors={true}
-          />
-          <EuiPage>
-            <EuiPageBody>
-              <EuiPageHeader>
-                <EuiTitle size="l">
-                  <h1>
-                    <FormattedMessage
-                      id="code.helloWorldText"
-                      defaultMessage="{name}"
-                      values={{ name: PLUGIN_NAME }}
-                    />
-                  </h1>
-                </EuiTitle>
-              </EuiPageHeader>
-              <EuiPageContent>
-                <EuiPageContentHeader>
-                  <EuiTitle>
-                    <h2>
-                      <pre>
-                        {file?.file_name}
-                      </pre>
-                    </h2>
-                  </EuiTitle>
-                </EuiPageContentHeader>
-                  <EuiPageContentBody>
-                    { notFound ? (
-                        <p>File not found</p>
-                    ): (!file ? (
-                        <EuiLoadingContent/>
-                    ) : (
+      <Router history={history}>
+        <I18nProvider>
+          <>
+            <navigation.ui.TopNavMenu
+              appName={PLUGIN_ID}
+              showSearchBar={false}
+              useDefaultBehaviors={true}
+            />
+              <EuiFieldSearch value={query} fullWidth onChange={onSearchChange} onSearch={search} isLoading={isSearching} suggestions={[]} placeholder="Search code" status={status} />
+            <EuiSpacer />
+            <EuiFlexGroup>
+              <EuiFlexItem>
+                <EuiPanel grow={false} style={{minWidth: 200}}>
+                  {outline && (<EuiTreeView 
+                    display="compressed"
+                    expandByDefault
+                    showExpansionArrows 
+                    items={outline} 
+                  />)}
+                </EuiPanel>
+              </EuiFlexItem>
+              <EuiFlexItem grow={8}>
+                  { isLoading && <EuiSpinner /> }
+            {
+                !isLoading && files && files.map(file => (<div>
+                  <EuiPageContentHeader>
+                    <EuiTitle>
+                      <h2>
+                        <pre>
+                          {file?.file_name || params.file}
+                        </pre>
+                      </h2>
+                    </EuiTitle>
+                  </EuiPageContentHeader>
+                  <EuiSpacer />
+                    <EuiPageContentBody>
 
-                          <EuiText>
-                            <EuiCodeBlock language={file?.language?.name.toLowerCase()} lineNumbers={lineNumbers}>
-                              {file?.source?.content}
-                            </EuiCodeBlock>
-                          </EuiText>
-                    ))}
-                </EuiPageContentBody>
-              </EuiPageContent>
-            </EuiPageBody>
-          </EuiPage>
-        </>
-      </I18nProvider>
-    </Router>
+                        <EuiText>
+                          <EuiCodeBlock language={file?.language?.name.toLowerCase()} lineNumbers={lines}>
+                            {file?.source?.content}
+                          </EuiCodeBlock>
+                        </EuiText>
+                  </EuiPageContentBody>
+                  <EuiSpacer />
+                  </div>
+                ))
+            }
+            </EuiFlexItem>
+            </EuiFlexGroup>
+          </>
+        </I18nProvider>
+      </Router>
   );
 };

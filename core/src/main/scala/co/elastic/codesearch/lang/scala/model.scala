@@ -17,19 +17,19 @@ object model {
 
     final case class Type(value: String) extends AnyVal
 
-    final case class Def(name: Name, params: List[Val], tpe: Type) extends ScalaLanguageElement {
+    final case class Def(names: Set[Name], params: List[Val], tpe: Type) extends ScalaLanguageElement {
       override val kind: LanguageElementKind = LanguageElementKind("def")
     }
 
-    final case class Val(name: Name, tpe: Type) extends ScalaLanguageElement {
+    final case class Val(names: Set[Name], tpe: Type) extends ScalaLanguageElement {
       override val kind: LanguageElementKind = LanguageElementKind("val")
     }
 
-    final case class Class(name: Name) extends ScalaLanguageElement {
+    final case class Class(names: Set[Name]) extends ScalaLanguageElement {
       override val kind: LanguageElementKind = LanguageElementKind("class")
     }
 
-    final case class Object(name: Name) extends ScalaLanguageElement {
+    final case class Object(names: Set[Name]) extends ScalaLanguageElement {
       override val kind: LanguageElementKind = LanguageElementKind("object")
     }
   }

@@ -4,13 +4,50 @@ import type { estypes } from '@elastic/elasticsearch';
 export function defineRoutes(router: IRouter) {
   router.get(
     {
+      path: '/api/code/search',
+      validate: false,
+    },
+    async (context, request, response) => {
+        const requestClient = context.core.elasticsearch.client.asCurrentUser;
+        const q = request.url.searchParams.get('q')
+
+        const result = await requestClient.search({
+            index: 'code-search-*',
+            body: {
+                query: {
+                    bool: {
+                        should: [
+                          {
+                            nested: {
+                                path: "spans",
+                                query: {
+                                    prefix: {
+                                        "spans.element.name": {
+                                            value: q
+                                        }
+                                    }
+                                }
+                            }
+                          }
+                        ]
+                    }
+                }
+            }
+        });
+
+        return response.ok({
+          body: result?.body,
+        });
+    }
+  )
+
+  router.get(
+    {
       path: '/api/code/class',
       validate: false,
     },
     async (context, request, response) => {
       const requestClient = context.core.elasticsearch.client.asCurrentUser;
-
-      console.log(request)
 
       var filters: estypes.QueryDslQueryContainer[] = []
       if (request.url.searchParams.get('class')) {
@@ -45,8 +82,6 @@ export function defineRoutes(router: IRouter) {
         index: 'code-search-*',
         body: search
       });
-
-      console.log(search)
       
       const firstHit = result?.body?.hits?.hits?.[0]?.['_source']
 

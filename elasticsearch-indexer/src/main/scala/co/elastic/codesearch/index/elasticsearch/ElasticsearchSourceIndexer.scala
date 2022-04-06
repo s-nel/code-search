@@ -58,13 +58,14 @@ class ElasticsearchSourceIndexer(
     logger.info(s"Indexing file [${file.fileName.value}]...")
     for {
       resp <- client.execute {
-        indexInto(indexName).fields(
+        indexInto(indexName).withId(file.path).fields(
           "version" -> file.version.value,
           "language" -> Map(
             "name" -> language.name,
             "version" -> language.version.map(_.value)
           ),
           "file_name" -> file.fileName.value,
+          "path" -> file.path,
           "source" -> Map(
             "content" -> file.source
           ),
@@ -105,6 +106,7 @@ class ElasticsearchSourceIndexer(
               )
             ),
             KeywordField("file_name"),
+            KeywordField("path"),
             ObjectField(
               name = "source",
               enabled = Some(false),

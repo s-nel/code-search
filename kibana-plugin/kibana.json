@@ -9,6 +9,7 @@
   "description": "Search, observe, and protect your code",
   "server": true,
   "ui": true,
-  "requiredPlugins": ["navigation", "fieldFormats"],
-  "optionalPlugins": []
+  "requiredPlugins": ["navigation", "fieldFormats", "observability" ],
+  "optionalPlugins": [],
+  "requiredBundles": [ "kibanaReact" ]
 }

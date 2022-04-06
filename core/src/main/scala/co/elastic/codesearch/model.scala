@@ -13,6 +13,7 @@ object model {
     version: Version,
     language: Language,
     fileName: FileName,
+    path: String,
     source: String,
     spans: Set[SourceSpan]
   )
