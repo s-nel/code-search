@@ -6,8 +6,17 @@ lazy val root = (project in file(".")).aggregate(example, core, scalaCompilerPlu
 lazy val example = (project in file("example"))
   .settings(
     scalaVersion := "2.12.10",
+    fork := true,
+    javaOptions ++= Seq(
+      "-Delastic.apm.service_name=foo",
+      "-Delastic.apm.server_urls=http://localhost:8200",
+      "-Delastic.apm.secret_token=mysecrettoken122",
+      "-Delastic.apm.application_packages=foo,bar"
+    ),
     libraryDependencies ++= Seq(
       "ch.qos.logback" % "logback-classic" % "1.0.1",
+      "co.elastic.apm" % "apm-agent-api" % "1.28.4",
+      "co.elastic.apm" % "apm-agent-attach" % "1.28.4",
       "co.elastic.logging" % "logback-ecs-encoder" % "1.3.2",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4"
     ),

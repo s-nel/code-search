@@ -27,7 +27,8 @@ import {
   EuiToken,
   EuiTreeViewNode,
   EuiSpinner,
-  EuiPanel
+  EuiPanel,
+  EuiEmptyPrompt
 } from '@elastic/eui';
 
 import { CoreStart, ScopedHistory } from '../../../../src/core/public';
@@ -49,19 +50,19 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
   const params = parse(history.location.search)
 
   // Use React hooks to manage state.
-  const [files, setFiles] = useState<object[] | undefined>();
-  const [notFound, setNotFound] = useState<boolean>(false);
-  const [isLoading, setLoading] = useState<boolean>(false)
+  const [files, setFiles] = useState<object[] | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isSearching, setSearching] = useState<boolean>(false)
   const [query, setQuery] = useState('')
   const [lines, setLines] = useState(params.lines ? {
                                          highlight: params.lines
                                        } : true)
   const [outline, setOutline] = useState(null)    
-  const [outlineLoading, setOutlineLoading] = useState(false)
+  const [outlineLoading, setOutlineLoading] = useState(false);
 
-  const findClass = (cls, file) => {
-    //setLoading(true)
+  const findClass = (cls: string, file: string) => {
+    //setFiles(undefined)
+    // setIsLoading(true)
     // Use the core http service to make a response to the server API.
     http.get('/api/code/class', {
       query: {
@@ -69,12 +70,10 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
         file: file,
       },
     }).then((res) => {
-      //setLoading(false)
+      setIsLoading(false)
       setFiles([res]);
-    }).catch(() => {
-      setNotFound(true)
     });
-  };
+  }
 
   const onSearchChange = (e) => {
     const q = e.target.value
@@ -83,7 +82,9 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
   }
 
   const search = () => {
+    setFiles(undefined)
     setSearching(true)
+    setIsLoading(true)
     setLines(true)
     http.get('/api/code/search', {
       query: {
@@ -91,18 +92,14 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
       }
     }).then((res) => {
       setSearching(false)
+      setIsLoading(false)
       console.log(res);
-      if (res?.hits?.hits?.length > 0) {
-          setNotFound(false)
-          var fs = []
-          res.hits.hits.forEach(hit => {
-              fs.push(hit['_source'])
-          })
-          setFiles(fs)
-      }
-      else {
-          setNotFound(true)
-      }
+          
+      var fs = []
+      res.hits.hits.forEach(hit => {
+          fs.push(hit['_source'])
+      })
+      setFiles(fs)
     })
   }
 
@@ -113,7 +110,6 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
           q: ''
       }
     }).then((res) => {
-        console.log(res);
         if (res?.hits?.hits?.length > 0) {
           const classes = res.hits.hits.flatMap(hit => {
             const src = hit['_source']
@@ -171,7 +167,7 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
     })
   }
 
-  if (!files && !isLoading && !notFound && (!!params.class || !!params.file)) {
+  if (!files && !isLoading && (!!params.class || !!params.file)) {
     findClass(params.class, params.file)
   }
 
@@ -205,6 +201,7 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
               </EuiFlexItem>
               <EuiFlexItem grow={8}>
                   { isLoading && <EuiSpinner /> }
+                  { !files && <EuiEmptyPrompt color="subdued" title={<h3>Class not found</h3>} layout="vertical"/> }
             {
                 !isLoading && files && files.map(file => (<div>
                   <EuiPageContentHeader>

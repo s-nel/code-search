@@ -1,11 +1,19 @@
 package foo
 
 import bar.Bar
+import co.elastic.apm.api.{ElasticApm, Span, Transaction}
+import co.elastic.apm.attach.ElasticApmAttacher
 import com.typesafe.scalalogging.Logger
 
-class Foo(val z: Long, val bar: Bar) {
+import scala.collection.JavaConverters._
+
+class Foo(val z: Long, val bar: Bar, parentSpan: Span) {
   def fullStrFoo(num: Int): Bar = {
-    new Bar(z.toString + bar.h + num.toString)
+    val span = parentSpan.startSpan()
+    span.setName("foo.Foo.fullStrFoo")
+    val result = new Bar(z.toString + bar.h + num.toString)
+    span.end()
+    result
   }
 
   def explode(): Unit = {
@@ -17,10 +25,18 @@ object Foo {
   val logger = Logger[Foo]
 
   def main(args: Array[String]): Unit = {
+    ElasticApmAttacher.attach()
+    val transaction = ElasticApm.startTransaction()
+    transaction.setName("foo.Foo$.main")
     try {
-      new Foo(1L, new Bar("b")).explode()
+      val foo = new Foo(1L, new Bar("b"), transaction)
+      foo.fullStrFoo(5)
+      foo.explode()
     } catch {
-      case e: Exception => logger.error("Error in Foo", e)
+      case e: Exception =>
+        transaction.captureException(e)
+        logger.error("Error in Foo", e)
     }
+    transaction.end()
   }
 }

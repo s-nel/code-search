@@ -22,3 +22,13 @@ services:
       - 5602:5601
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+  apm:
+    image: docker.elastic.co/apm/apm-server:7.15.2
+    ports:
+      - 8200:8200
+    entrypoint:
+      - apm-server
+      - -e
+      - --strict.perms=false
+      - -E
+      - output.elasticsearch.hosts=["elasticsearch:9200"]
