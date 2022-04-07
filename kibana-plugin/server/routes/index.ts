@@ -94,4 +94,50 @@ export function defineRoutes(router: IRouter) {
       });
     }
   );
+
+  router.get(
+    {
+      path: '/api/code/logs',
+      validate: false,
+    },
+    async (context, request, response) => {
+      const requestClient = context.core.elasticsearch.client.asCurrentUser;
+      const classes = request.url.searchParams.get('classes')?.split(',')
+      
+      const shoulds = classes.map(c => {
+        return {
+          regexp: {
+            'error.stack_trace': {
+              value: `.*\s${c}\..*`
+            }
+          }
+        }
+      })
+
+      const result = await requestClient.search({
+        index: 'filebeat-*',
+        body: {
+          query: {
+            bool: {
+              should: shoulds,
+              filter: [
+                {
+                  range: {
+                    '@timestamp': {
+                      format: 'strict_date_optional_time',
+                      gte: 'now-30d'
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      })
+
+      return response.ok({
+        body: result?.body,
+      })
+    }
+  )
 }

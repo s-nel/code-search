@@ -30,10 +30,10 @@ object Foo {
     val span = parent.startSpan()
     new Throwable().getStackTrace.lift(1).foreach { callerStack =>
       span.setName(s"${callerStack.getClassName}.${callerStack.getMethodName}")
-      span.setLabel("log.origin.function", callerStack.getMethodName)
-      span.setLabel("log.origin.file.name", callerStack.getFileName)
-      span.setLabel("log.origin.file.line", callerStack.getLineNumber)
-      span.setLabel("log.logger", callerStack.getClassName)
+      span.setLabel("span.origin.function", callerStack.getMethodName)
+      span.setLabel("span.origin.file.name", callerStack.getFileName)
+      span.setLabel("span.origin.file.line", callerStack.getLineNumber)
+      span.setLabel("span.origin.class.name", callerStack.getClassName)
     }
     val result = Try(f)
     result match {

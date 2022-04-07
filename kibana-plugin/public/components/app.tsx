@@ -37,6 +37,7 @@ import { NavigationPublicPluginStart } from '../../../../src/plugins/navigation/
 import { PLUGIN_ID, PLUGIN_NAME } from '../../common';
 import { SerializableRecord } from '@kbn/utility-types';
 import { integer } from '@elastic/elasticsearch/api/types';
+import { ConnectorSelector } from 'x-pack/plugins/cases/public/components/connector_selector/form';
 
 interface CodeAppDeps {
   basename: string;
@@ -50,6 +51,7 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
   const params = parse(history.location.search)
 
   // Use React hooks to manage state.
+  const [isEmpty, setIsEmpty] = useState<boolean>(false);
   const [loadedFromParams, setLoadedFromParams] = useState<boolean>(false);
   const [files, setFiles] = useState<object[] | undefined>(undefined);
   const [isLoading, setIsLoading] = useState<boolean>(false)
@@ -72,7 +74,10 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
       },
     }).then((res) => {
       setFiles([res]);
+      loadLogs([res])
+    }).finally(() => {
       setIsLoading(false)
+      setIsEmpty(false)
     });
   }
 
@@ -97,8 +102,88 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
           
       const fs = res.hits.hits.map(hit => hit['_source'])
       setFiles(fs)
+      loadLogs(fs)
+    }).finally(() => {
       setIsLoading(false)
-    })
+      setIsEmpty(false)
+    });
+  }
+
+  function componentToHex(c) {
+    var hex = c.toString(16);
+    return hex.length == 1 ? "0" + hex : hex;
+  }
+  
+  function rgbToHex(r, g, b) {
+    return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b);
+  }
+
+  const loadLogs = (files) => {
+    if (files) {
+      const onlyUnique = (value, index, self) => {
+        return self.indexOf(value) === index
+      }
+
+      const classStr = files.flatMap(f => {
+        return f.spans.filter(s => {
+          return s.element.kind == 'class' || s.element.kind == 'object'
+        }).flatMap(s => s.element.name)
+      }).filter(onlyUnique)
+
+      http.get('/api/code/logs', {
+        query: {
+          classes: classStr.join(',')
+        }
+      }).then((res) => {
+        const stackTraces = res.hits.hits.map(h => h['_source']).flatMap(s => s && s.error && s.error.stack_trace ? [s.error.stack_trace] : [])
+        files.forEach(f => {
+          const problemLines = stackTraces.flatMap(st => {
+            const stls = st.split("\n")
+            return stls.flatMap((stl, index) => {
+              const regexpStr = `\\(${f.file_name}:(\\d+)\\)`
+              const match = stl.match(new RegExp(regexpStr))
+              if (match) {
+                return [{
+                  line: parseInt(match[1]),
+                  weight: Math.pow(stls.length - index, 6)
+                }]
+              } else {
+                return []
+              }
+            })
+          })
+
+          f.lineProblems = {}
+          var maxLineProblems = 0
+          problemLines.forEach(l => {
+            f.lineProblems[l.line] = f.lineProblems[l.line] ? f.lineProblems[l.line] + l.weight : l.weight;
+            if (f.lineProblems[l.line] > maxLineProblems) {
+              maxLineProblems = f.lineProblems[l.line]
+            }
+          })
+
+          Object.keys(f.lineProblems).map(k => {
+            const fraction = f.lineProblems[k] / maxLineProblems
+            console.log(f.lineProblems[k], fraction, maxLineProblems)
+            const r = 255
+            const g = Math.round((1 - fraction) * 140)
+            const b = 0
+            const a = fraction * .4
+            const color = rgbToHex(r, g, b)
+            console.log('color', r, g, b, color)
+
+            f.lineProblems[k] = {
+              count: f.lineProblems[k],
+              color: {r, g, b, a},
+            }
+          })
+        })
+        console.log(files)
+        setFiles(files)
+      }).catch(e => {
+        setFiles(files)
+      })
+    }
   }
 
   const loadOutline = () => {
@@ -113,8 +198,6 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
             const src = hit['_source']
             return src.spans.filter(span => span.element.kind == 'class')
           })
-
-          console.log(classes)
 
           var outline: EuiTreeViewNode[] = []
 
@@ -157,8 +240,6 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
             findOrCreatePackage(packageArr, cls, outline)
           })
 
-          console.log(outline)
-
           setOutline(outline)
         }
         setOutlineLoading(false)
@@ -168,10 +249,23 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
   if (!loadedFromParams && (!!params.class || !!params.file)) {
     setLoadedFromParams(true)
     findClass(params.class, params.file)
+  } else if (!loadedFromParams && (!params.class && !params.file)) {
+    setLoadedFromParams(true)
+    setIsEmpty(true)
   }
 
   if (outline == null && !outlineLoading) {
     loadOutline()
+  }
+
+  const lineProblemHighlightClasses = (file) => {
+    console.log(file.lineProblems)
+    const result = file.lineProblems && Object.keys(file.lineProblems).map(k => {
+      const lp = file.lineProblems[k]
+      return `span.euiCodeBlock__line:nth-of-type(${k}) { background-color: rgba(${lp.color.r}, ${lp.color.g}, ${lp.color.b}, ${lp.color.a}); }`
+    }).join("\n")
+    console.log(result)
+    return result
   }
 
   // Render the application DOM.
@@ -200,10 +294,11 @@ export const CodeApp = ({ basename, notifications, http, navigation, history }: 
               </EuiFlexItem>
               <EuiFlexItem grow={8}>
                 { isLoading && <EuiLoadingContent lines={3} /> }
-                { !files && !isLoading && <EuiEmptyPrompt color="subdued" title={<h3>Class not found</h3>} layout="vertical"/> }
+                { !files && !isLoading && !isEmpty && <EuiEmptyPrompt color="subdued" title={<h3>Class not found</h3>} layout="vertical"/> }
                 {
                   !isLoading && files && files.map(file => (
                     <div>
+                      <style>{lineProblemHighlightClasses(file)}</style>
                       <EuiPageContentHeader>
                         <EuiTitle size="s">
                             <pre>
