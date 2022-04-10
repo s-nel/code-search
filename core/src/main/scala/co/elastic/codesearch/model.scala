@@ -19,8 +19,8 @@ object model {
   )
 
   final case class SourceSpan(
-    start: Int,
-    end: Int,
+    start: Option[Int],
+    end: Option[Int],
     element: LanguageElement
   )
 

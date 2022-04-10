@@ -52,8 +52,12 @@ export class CodePlugin implements Plugin<CodePluginSetup, CodePluginStart, Code
                     const cls = clsMethod.substring(0, clsMethod.lastIndexOf("."))
                     const file = matches[3];
                     const lineNum = matches[4];
-                    const url = codeUrl(cls, file, lineNum)
-                    formattedLines.push(`${matches[1]}${clsMethod}(<a href="${url}">${file}:${lineNum}</a>)`);
+                    if (cls.startsWith("foo") || cls.startsWith("bar")) {
+                      const url = codeUrl(cls, file, lineNum)
+                      formattedLines.push(`${matches[1]}${clsMethod}(<a href="${url}">${file}:${lineNum}</a>)`);
+                    } else {
+                      formattedLines.push(line)
+                    }
                 } else {
                     formattedLines.push(line)
                 }

@@ -22,11 +22,15 @@ lazy val example = (project in file("example"))
     ),
     scalacOptions ++= Seq(
       s"-Xplugin:${assembly.in(Compile).in(scalaCompilerPlugin).value}",
-      s"-P:code-search:output:file:${target.value / "code-search" / "output.log"}",
-      s"-P:code-search:version:${version.value}",
-      s"-P:code-search:output:es:url:http://localhost:9200",
+      s"-P:code-indexer-scala:output:file:${target.value / "code-search" / "output.log"}",
+      s"-P:code-indexer-scala:version:${version.value}",
+      s"-P:code-indexer-scala:output:es:url:http://localhost:9200",
       "-Yrangepos"
-    )
+    ),
+    javacOptions ++= Seq(
+      "-Xplugin:code-indexer-java"
+    ),
+    unmanagedJars in Compile ++= Seq(assembly.in(Compile).in(javaCompilerPlugin).value)
   )
   .enablePlugins(CodeSearchPlugin)
 
@@ -41,17 +45,32 @@ lazy val core = (project in file("core")).settings(
   )
 )
 
-lazy val javaCompilerPlugin = (project in file("java-compiler-plugin")).enablePlugins(SbtJdiTools)
+lazy val javaCompilerPlugin =
+  (project in file("java-compiler-plugin"))
+    .enablePlugins(SbtJdiTools)
+    .settings(
+      assemblyJarName in assembly := "java-compiler-plugin.jar",
+      assemblyMergeStrategy in assembly := {
+        case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+        case _ => MergeStrategy.first
+      },
+      libraryDependencies ++= Seq(
+        "co.elastic.clients" % "elasticsearch-java" % "7.17.2",
+        "com.fasterxml.jackson.core" % "jackson-databind" % "2.12.3"
+      )
+    )
 
-lazy val elasticsearchIndexer = (project in file("elasticsearch-indexer")).settings(
-  scalaVersion := "2.12.10",
-  libraryDependencies ++= Seq(
-    "ch.qos.logback" % "logback-classic" % "1.0.1",
-    "com.sksamuel.elastic4s" %% "elastic4s-core" % "7.17.2",
-    "com.sksamuel.elastic4s" %% "elastic4s-client-esjava" % "7.17.2",
-    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4"
+lazy val elasticsearchIndexer = (project in file("elasticsearch-indexer"))
+  .settings(
+    scalaVersion := "2.12.10",
+    libraryDependencies ++= Seq(
+      "ch.qos.logback" % "logback-classic" % "1.0.1",
+      "com.sksamuel.elastic4s" %% "elastic4s-core" % "7.17.2",
+      "com.sksamuel.elastic4s" %% "elastic4s-client-esjava" % "7.17.2",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4"
+    )
   )
-).dependsOn(core)
+  .dependsOn(core)
 
 lazy val scalaCompilerPlugin = (project in file("scala-compiler-plugin"))
   .settings(
